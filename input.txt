@@ -1,0 +1,12 @@
+hello can you hear me;
+int main(){
+char ch = '3';
+char cm = '"';
+char mh='\''
+char h = '\t';
+int 12.b;
+'
+''
+'a
+'abc
+}
