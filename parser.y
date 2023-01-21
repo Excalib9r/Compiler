@@ -22,31 +22,130 @@ FILE* error;
 vector<SymbolInfo*> idList;
 vector<SymbolInfo*> paramList;
 SymbolTable table;
+bool indexNotFloat = false;
+int recursiveIndexCount = 0;
+int reducedToFloat = 0;
+bool arrayIndexConstFloat = false;
 
 extern int line_count;
 extern int error_count;
 extern FILE *yyin;
 
+void callingFunctionError(SymbolInfo* sym){
+	SymbolInfo* symbol = table.LookUp(sym->getName());
+	if(symbol == NULL){
+		fprintf(error, "Line# %d: Undeclared function '%s'\n", line_count, sym->getName().c_str());
+		error_count++;
+	}
+	else{
+		if(symbol->getType() == "VOID") {
+			fprintf(error, "Line# %d: Void cannot be used in expression\n", line_count);
+			error_count++;
+		}
+	}
+}
+
+void helperFunction(SymbolInfo* sym){
+	SymbolInfo* symbol = table.LookUp(sym->getName());
+	if(symbol == NULL){
+		fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, sym->getName().c_str());
+		error_count++;
+	}
+	else{
+    	if(symbol->getType() != "INT")
+		fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+		if(symbol->getIsPointer())
+		fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+		error_count++;
+	}
+}
+
+// void anotherHelperFunction(SymbolInfo* sym){
+// 	SymbolInfo* symbol = table.LookUp(sym->getName());
+// 	if(symbol == NULL){
+// 		fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, sym->getName().c_str());
+// 	}
+// 	else{
+// 		if(symbol->getIsPointer())
+// 		fprintf(error, "Line# %d: '%s' is an array type variable\n", line_count, sym->getName().c_str());
+// 	}
+// }
 
 void yyerror(char *s)
 {
 	fprintf(error, "Line# %d: %s\n", line_count, s);
+	error_count++;
+}
+
+void setIndexNotFloat(SymbolInfo* sym){
+	indexNotFloat = true;
+	recursiveIndexCount++;
+	if(recursiveIndexCount > 1){
+		SymbolInfo* symbol = table.LookUp(sym->getName());
+		if(symbol == NULL){
+			fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, sym->getName().c_str());
+			error_count++;
+		}
+		if(symbol->getType() != "INT"){
+			fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+			error_count++;
+		}
+		if(!symbol->getIsPointer()){
+			fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+			error_count++;
+		}
+	}
+}
+
+void idAlreadyExist(string s){
+	fprintf(error, "Line# %d: %s\n", line_count, s.c_str());
+	error_count++;
 }
 
 void insertIntoTable(string type){
 	if(idList.empty()){
 		return;
 	}
-	for(int i = 0; i < idList.size(); i++){
-		SymbolInfo* newSymbol = new SymbolInfo(idList[i]->getName(), type , idList[i]->getLine(), idList[i]->getIsPointer());
-		table.Insert(newSymbol);
+	if(type[0] == 'V'){
+		for(int i = 0; i < idList.size(); i++){
+			fprintf(error, "Line# %d: Variable or field '%s' declared void\n", line_count, idList[i]->getName().c_str());
+			error_count++;
+		}
+	}
+	else{
+		for(int i = 0; i < idList.size(); i++){
+			SymbolInfo* newSymbol = new SymbolInfo(idList[i]->getName(), type , idList[i]->getLine(), idList[i]->getIsPointer());
+			bool inserted = table.Insert(newSymbol);
+			if(!inserted){
+				bool typeSpecSame = table.typeSpecifierSame(newSymbol);
+				if(typeSpecSame){
+					fprintf(error, "Line# %d: Redefinition of parameter '%s'\n", line_count, idList[i]->getName().c_str());
+					error_count++;
+				}
+				else{
+					fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, idList[i]->getName().c_str());
+					error_count++;
+				}
+			}
+		}
 	}
 	idList.clear();
 }
 
 void insertParamList(){
 	for(int i = 0; i < paramList.size(); i++){
-		table.Insert(paramList[i]);
+		bool inserted = table.Insert(paramList[i]);
+			if(!inserted){
+				bool typeSpecSame = table.typeSpecifierSame(paramList[i]);
+				if(typeSpecSame){
+					fprintf(error, "Line# %d: Redefinition of parameter '%s'\n", line_count-1, paramList[i]->getName().c_str());
+					error_count++;
+				}
+				else{
+					fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count-1, paramList[i]->getName().c_str());
+					error_count++;
+				}
+			}
 	}
 	paramList.clear();
 }
@@ -60,7 +159,14 @@ void funcDef(SymbolInfo* typeSpec, SymbolInfo* symbol){
 	string type = typeSpec->childList[0]->getType();
 	SymbolInfo* newSymbol = new SymbolInfo(symbol->getName(), type , symbol->getLine(), symbol->getIsPointer());
 	newSymbol->setIsFunction(true);
-	table.Insert(newSymbol);
+	bool inserted = table.Insert(newSymbol);
+	if(!inserted){
+		bool typeSame = table.SymbolTypeSame(newSymbol);
+		if(!typeSame){
+			fprintf(error, "Line# %d: '%s' redeclared as different kind of symbol\n", line_count, newSymbol->getName().c_str());
+			error_count++;
+		}
+	}
 }
 
 void enterScopeAndAdd(){
@@ -74,6 +180,10 @@ void printRule(SymbolInfo* s){
 	fprintf(tablelog,"%s ", s->childList[i]->type.c_str());
 	}
 	fprintf(tablelog,"\n");
+}
+
+void arrayIndexError(){
+
 }
 
 void print_parsetree(int space, SymbolInfo* s) {
@@ -251,7 +361,6 @@ compound_statement : LCURL {enterScopeAndAdd();} statements RCURL{
 		$$->addChild($3);
 		$$->addChild($4);
 		$$->changeLine();
-		insertParamList();
 		printRule($$);
 		table.PrintAllScopeTable(tablelog);
 		table.ExitScope();
@@ -426,6 +535,11 @@ statement : var_declaration{
 		$$->addChild($4);
 		$$->addChild($5);
 		$$->changeLine();
+		SymbolInfo* symbol = table.LookUp($3->getName());
+		if(symbol == NULL){
+			fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, $3->getName().c_str());
+			error_count++;
+		}
 		printRule($$);
 	}
 	| RETURN expression SEMICOLON{
@@ -457,15 +571,28 @@ variable : ID {
 		$$ = new SymbolInfo("variable", "variable");
 		$$->addChild($1);
 		$$->changeLine();
+		if(indexNotFloat){
+			helperFunction($1);
+		}
 		printRule($$);
+
+		indexNotFloat = false;
+        recursiveIndexCount = 0;
 	}		
-	| ID LSQUARE expression RSQUARE {
+	| ID LSQUARE {setIndexNotFloat($1);} expression RSQUARE {
 		$$ = new SymbolInfo("variable", "variable");
 		$$->addChild($1);
 		$$->addChild($2);
-		$$->addChild($3);
 		$$->addChild($4);
+		$$->addChild($5);
 		$$->changeLine();
+		if(arrayIndexConstFloat){
+		fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+		error_count++;
+		arrayIndexConstFloat = false;
+		indexNotFloat = false;
+        recursiveIndexCount = 0;
+		}
 		printRule($$);
 	}
 	;
@@ -546,7 +673,14 @@ term :	unary_expression{
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->changeLine();
+		if($2->getName() == "%"){
+			if(reducedToFloat != 0){
+				fprintf(error, "Line# %d: Operands of modulus must be integers\n", line_count);
+				error_count++;
+			}
+		}
 		printRule($$);
+		reducedToFloat = 0;
 	}
     ;
 
@@ -585,6 +719,7 @@ factor	: variable {
 		$$->addChild($3);
 		$$->addChild($4);
 		$$->changeLine();
+		callingFunctionError($1);
 		printRule($$);
 	}
 	| LPAREN expression RPAREN{
@@ -603,8 +738,10 @@ factor	: variable {
 	}
 	| CONST_FLOAT{
 		$$ = new SymbolInfo("factor", "factor");
+		arrayIndexConstFloat = true;
 		$$->addChild($1);
 		$$->changeLine();
+		reducedToFloat++;
 		printRule($$);
 	}
 	| variable INCOP{
@@ -652,7 +789,7 @@ arguments : arguments COMMA logic_expression{
 int main(int argc,char *argv[])
 {
 	table.EnterScope();
-	FILE* fp = fopen("noerror.c", "r");
+	FILE* fp = fopen("sserror.c", "r");
 	tokenout = fopen("tokenout.txt", "w");
 	logout = fopen("logout.txt", "w");
 	parseFile = fopen("parsetree.txt", "w");
@@ -660,6 +797,7 @@ int main(int argc,char *argv[])
 	error = fopen("error.txt", "w");
 	yyin = fp;
 	yyparse();
+	table.PrintAllScopeTable(tablelog);
 	fprintf(tablelog, "Total Lines: %d\n", line_count);
 	fprintf(tablelog, "Total Errors: %d", error_count);
 

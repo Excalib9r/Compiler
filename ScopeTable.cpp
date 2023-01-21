@@ -152,6 +152,32 @@ public:
         return inserted;
     }
 
+    bool SymbolTypeSame (SymbolInfo* symbol){
+        bool typeSame = false;
+        SymbolInfo *value = LookUp(symbol->getName());
+        if(value != NULL){
+            if(value->getIsFunction()){
+                if(symbol->getIsFunction())
+                    typeSame = true;
+            }
+            else{
+                if(!symbol->getIsFunction())
+                    typeSame = true;
+            }
+        }
+        return typeSame;
+    }
+
+    bool typeSpecifierSame(SymbolInfo* symbol){
+        bool typeSame = false;
+        SymbolInfo *value = LookUp(symbol->getName());
+        if(value != NULL){
+            if(value->getType() == symbol->getType())
+            typeSame = true;
+        }
+        return typeSame;
+    }
+
     bool Delete(string name)
     {
         SymbolInfo *symbol = LookUp(name);

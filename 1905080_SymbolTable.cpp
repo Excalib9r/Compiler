@@ -80,6 +80,16 @@ public:
         return inserted;
     }
 
+    bool SymbolTypeSame(SymbolInfo* symbol){
+        bool typeSame = current->SymbolTypeSame(symbol);
+        return typeSame;
+    }
+
+    bool typeSpecifierSame(SymbolInfo* symbol){
+        bool typeSame = current->typeSpecifierSame(symbol);
+        return typeSame;
+    }
+
     bool Remove(string name)
     {
         bool deleted = current->Delete(name);
@@ -89,7 +99,7 @@ public:
         return deleted;
     }
 
-    SymbolInfo *LookUp(string name)
+    SymbolInfo* LookUp(string name)
     {
         ScopeTable *parent = current;
         SymbolInfo *symbol = parent->LookUp(name);

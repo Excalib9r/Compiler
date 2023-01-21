@@ -2,8 +2,8 @@ Line# 20: Redefinition of parameter 'a'
 Line# 24: Conflicting types for 'foo3'
 Line# 28: 'z' redeclared as different kind of symbol
 Line# 32: Conflicting types for 'var'
-Line# 42: Variable or field 'e' declared void
-Line# 43: Conflicting types for'a'
+Line# 42: Variyable or field 'e' declared void
+Line# 43: Conflicting tpes for'a'
 Line# 43: Conflicting types for'c'
 Line# 45: Type mismatch for argument 1 of 'func'
 Line# 45: Type mismatch for argument 2 of 'func'
