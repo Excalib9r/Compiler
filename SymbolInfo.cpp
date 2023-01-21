@@ -2,8 +2,10 @@
 #define SYMBOLINFO_HPP
 
 #include <iostream>
+#include "FunctionHandler.cpp"
 #include <vector>
 #include <string>
+
 using namespace std;
 
 class SymbolInfo
@@ -14,6 +16,7 @@ public:
     string dtype;
     SymbolInfo *nextSymbol;
     vector<SymbolInfo*> childList;
+    FHandle *fh;
     int start;
     int end;
     bool isPointer;
@@ -28,6 +31,7 @@ public:
         end = line;
         this->isPointer = isPointer;
         isFunction = false;
+        fh = new FHandle();
     }
 
     int getLine(){

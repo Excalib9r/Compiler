@@ -1,16 +1,1 @@
-Line# 7: Redefinition of parameter 'a'
-Line# 7: Redefinition of parameter 'b'
-Line# 20: Redefinition of parameter 'a'
-Line# 28: 'z' redeclared as different kind of symbol
-Line# 42: Variable or field 'e' declared void
-Line# 43: Conflicting types for 'a'
-Line# 43: Conflicting types for 'c'
-Line# 53: Array subscript is not an integer
-Line# 54: Array subscript is not an integer
-Line# 55: Void cannot be used in expression
-Line# 57: Void cannot be used in expression
-Line# 58: Void cannot be used in expression
-Line# 60: Operands of modulus must be integers
-Line# 61: Operands of modulus must be integers
-Line# 63: Undeclared function 'foo5'
-Line# 68: Undeclared function 'printf'
+Line# 21: Too many arguments to function 'var'

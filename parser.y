@@ -21,15 +21,62 @@ FILE* error;
 
 vector<SymbolInfo*> idList;
 vector<SymbolInfo*> paramList;
+vector<string> paramType;
+vector<SymbolInfo*> argType;
+
 SymbolTable table;
+bool funcarglist = false;
+bool flagzero = false;
+bool divbyzero = false;
+bool funcVoidError = false;
+SymbolInfo* forFuncVoidError;
 bool indexNotFloat = false;
 int recursiveIndexCount = 0;
 int reducedToFloat = 0;
 bool arrayIndexConstFloat = false;
+bool insideFunction = false;
 
 extern int line_count;
 extern int error_count;
 extern FILE *yyin;
+
+void checkFoargTypeError(SymbolInfo* sym){
+	insideFunction = false;
+	SymbolInfo* symbol = table.LookUp(sym->getName());
+	if(symbol != NULL){
+		if(symbol->getIsFunction()){
+			if(symbol->fh->isDefined){
+				if(argType.size() > symbol->fh->paramList.size()){
+					fprintf(error, "Line# %d: Too many arguments to function '%s'\n", line_count, sym->getName().c_str());
+					error_count++;
+				}
+				else if(argType.size() < symbol->fh->paramList.size()){
+					fprintf(error, "Line# %d: Too few arguments to function '%s'\n", line_count, sym->getName().c_str());
+					error_count++;
+				}
+				else{
+					for(int i = 0; i < argType.size(); i++){
+						if(argType[i]->getIsPointer()){
+							fprintf(error, "Line# %d: Type mismatch for argument %d of '%s'\n", line_count, i+1, sym->getName().c_str());
+							error_count++;
+						}
+						else{
+							if(argType[i]->getType() != symbol->fh->paramList[i]){
+								fprintf(error, "Line# %d: Type mismatch for argument %d of '%s'\n", line_count, i+1, sym->getName().c_str());
+								error_count++;
+							}
+						}
+					}
+				}
+			}
+			else{
+				fprintf(error, "Line# %d: Warning Undefined function '%s'\n", line_count, sym->getName().c_str());
+				error_count++;
+			}
+		}
+	}
+	argType.clear();
+}
 
 void callingFunctionError(SymbolInfo* sym){
 	SymbolInfo* symbol = table.LookUp(sym->getName());
@@ -43,6 +90,8 @@ void callingFunctionError(SymbolInfo* sym){
 			error_count++;
 		}
 	}
+	funcVoidError = false;
+	delete forFuncVoidError;
 }
 
 void helperFunction(SymbolInfo* sym){
@@ -52,11 +101,15 @@ void helperFunction(SymbolInfo* sym){
 		error_count++;
 	}
 	else{
-    	if(symbol->getType() != "INT")
-		fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
-		if(symbol->getIsPointer())
-		fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
-		error_count++;
+		if(symbol->getIsPointer()){
+			fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+			error_count++;
+		}
+		else{
+			if(symbol->getType() != "INT")
+			fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+			error_count++;
+		}
 	}
 }
 
@@ -80,19 +133,37 @@ void yyerror(char *s)
 void setIndexNotFloat(SymbolInfo* sym){
 	indexNotFloat = true;
 	recursiveIndexCount++;
+
+	if(recursiveIndexCount == 1){
+		SymbolInfo* symbol = table.LookUp(sym->getName());
+		if(symbol == NULL){
+			fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, sym->getName().c_str());
+			error_count++;
+		}
+		else{
+			if(!symbol->getIsPointer()){
+				fprintf(error, "Line# %d: '%s' is not an array\n", line_count, symbol->getName().c_str());
+				error_count++;
+			}
+		}
+	}
 	if(recursiveIndexCount > 1){
 		SymbolInfo* symbol = table.LookUp(sym->getName());
 		if(symbol == NULL){
 			fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, sym->getName().c_str());
 			error_count++;
 		}
-		if(symbol->getType() != "INT"){
-			fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
-			error_count++;
-		}
-		if(!symbol->getIsPointer()){
-			fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
-			error_count++;
+		else{
+			if(symbol->getType() != "INT"){
+				fprintf(error, "Line# %d: Array subscript is not an integer\n", line_count);
+				error_count++;
+			}
+			else{
+				if(!symbol->getIsPointer()){
+					fprintf(error, "Line# %d: '%s' is not an array\n", line_count, symbol->getName().c_str());
+					error_count++;
+				}
+			}
 		}
 	}
 }
@@ -117,14 +188,34 @@ void insertIntoTable(string type){
 			SymbolInfo* newSymbol = new SymbolInfo(idList[i]->getName(), type , idList[i]->getLine(), idList[i]->getIsPointer());
 			bool inserted = table.Insert(newSymbol);
 			if(!inserted){
-				bool typeSpecSame = table.typeSpecifierSame(newSymbol);
-				if(typeSpecSame){
-					fprintf(error, "Line# %d: Redefinition of parameter '%s'\n", line_count, idList[i]->getName().c_str());
-					error_count++;
+				if(table.getCurrentScoptableNumber() == 1){
+					SymbolInfo* func = table.LookUp(newSymbol->getName());
+					if(!func->getIsFunction()){
+						bool typeSpecSame = table.typeSpecifierSame(newSymbol);
+						if(typeSpecSame){
+							fprintf(error, "Line# %d: Redefinition of parameter '%s'\n", line_count, idList[i]->getName().c_str());
+							error_count++;
+						}
+						else{
+							fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, idList[i]->getName().c_str());
+							error_count++;
+						}
+					}
+					else{
+						fprintf(error, "Line# %d: '%s' redeclared as different kind of symbol\n", line_count, newSymbol->getName().c_str());
+						error_count++;
+					}
 				}
 				else{
-					fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, idList[i]->getName().c_str());
-					error_count++;
+					bool typeSpecSame = table.typeSpecifierSame(newSymbol);
+					if(typeSpecSame){
+						fprintf(error, "Line# %d: Redefinition of parameter '%s'\n", line_count, idList[i]->getName().c_str());
+						error_count++;
+					}
+					else{
+						fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, idList[i]->getName().c_str());
+						error_count++;
+					}
 				}
 			}
 		}
@@ -155,6 +246,44 @@ void addToparamList(string type, SymbolInfo* symbol){
 	paramList.push_back(newSymbol);
 }
 
+void funcDec(SymbolInfo* typeSpec, SymbolInfo* symbol){
+	string type = typeSpec->childList[0]->getType();
+	SymbolInfo* newSymbol = new SymbolInfo(symbol->getName(), type , symbol->getLine(), symbol->getIsPointer());
+	newSymbol->setIsFunction(true);
+	bool inserted = table.Insert(newSymbol);
+	if(!inserted){
+		bool typeSame = table.SymbolTypeSame(newSymbol);
+		if(!typeSame){
+			fprintf(error, "Line# %d: '%s' redeclared as different kind of symbol\n", line_count, newSymbol->getName().c_str());
+			error_count++;
+		}
+		else{
+			SymbolInfo* func = table.LookUp(newSymbol->getName());
+			bool sameSpec = table.typeSpecifierSame(newSymbol);
+			if(!sameSpec){
+				fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, newSymbol->getName().c_str());
+				error_count++;
+			}
+			else{
+				bool sameLi =  func->fh->sameParamList(paramType);
+				if(!sameLi){
+					cout << "hello\n";
+					fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, newSymbol->getName().c_str());
+					error_count++;
+				}
+			}
+		}
+	}
+	else{
+		newSymbol->fh->isDeclared = true;
+		for(int  i = 0; i < paramType.size(); i++){
+			newSymbol->fh->paramList.push_back(paramType[i]);
+		}
+	}
+	paramType.clear();
+	paramList.clear();
+}
+
 void funcDef(SymbolInfo* typeSpec, SymbolInfo* symbol){
 	string type = typeSpec->childList[0]->getType();
 	SymbolInfo* newSymbol = new SymbolInfo(symbol->getName(), type , symbol->getLine(), symbol->getIsPointer());
@@ -166,7 +295,32 @@ void funcDef(SymbolInfo* typeSpec, SymbolInfo* symbol){
 			fprintf(error, "Line# %d: '%s' redeclared as different kind of symbol\n", line_count, newSymbol->getName().c_str());
 			error_count++;
 		}
+		else{
+			SymbolInfo* func = table.LookUp(newSymbol->getName());
+			bool sameSpec = table.typeSpecifierSame(newSymbol);
+			if(!sameSpec){
+				fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, newSymbol->getName().c_str());
+				error_count++;
+			}
+			else{
+				bool sameLi =  func->fh->sameParamList(paramType);
+				if(!sameLi){
+					fprintf(error, "Line# %d: Conflicting types for '%s'\n", line_count, newSymbol->getName().c_str());
+					error_count++;
+				}
+				else{
+					func->fh->isDefined = true;
+				}
+			}
+		}
 	}
+	else{
+		newSymbol->fh->isDefined = true;
+		for(int  i = 0; i < paramType.size(); i++){
+			newSymbol->fh->paramList.push_back(paramType[i]);
+		}
+	}
+	paramType.clear();
 }
 
 void enterScopeAndAdd(){
@@ -273,24 +427,24 @@ unit : var_declaration {
 	}
     ;
      
-func_declaration : type_specifier ID LPAREN parameter_list RPAREN SEMICOLON{
+func_declaration : type_specifier ID LPAREN parameter_list RPAREN {funcDec($1, $2);} SEMICOLON{
 		$$ = new SymbolInfo("func_declaration", "func_declaration");
 		$$->addChild($1);
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->addChild($4);
 		$$->addChild($5);
-		$$->addChild($6);
+		$$->addChild($7);
 		$$->changeLine();
 		printRule($$);
 	}
-	| type_specifier ID LPAREN RPAREN SEMICOLON{
+	| type_specifier ID LPAREN RPAREN {funcDec($1, $2);} SEMICOLON{
 		$$ = new SymbolInfo("func_declaration", "func_declaration");
 		$$->addChild($1);
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->addChild($4);
-		$$->addChild($5);
+		$$->addChild($6);
 		$$->changeLine();
 		printRule($$);
 	}
@@ -327,6 +481,7 @@ parameter_list  : parameter_list COMMA type_specifier ID{
 		$$->addChild($4);
 		string type = $3->childList[0]->getType();
 		addToparamList(type, $4);
+		paramType.push_back($3->childList[0]->getType());
 		$$->changeLine();
 		printRule($$);
 	}
@@ -335,6 +490,7 @@ parameter_list  : parameter_list COMMA type_specifier ID{
 		$$->addChild($1);
 		$$->addChild($2);
 		$$->addChild($3); // used in function declaration
+		paramType.push_back($3->childList[0]->getType());
 		$$->changeLine();
 		printRule($$);
 	}
@@ -344,12 +500,14 @@ parameter_list  : parameter_list COMMA type_specifier ID{
 		$$->addChild($2);
 		string type = $1->childList[0]->getType();
 		addToparamList(type, $2);
+		paramType.push_back($1->childList[0]->getType());
 		$$->changeLine();	
 		printRule($$);	
 	}
 	| type_specifier{
 		$$ = new SymbolInfo("parameter_list", "parameter_list");
 		$$->addChild($1); // used in function declaration
+		paramType.push_back($1->childList[0]->getType());
 		$$->changeLine();
 		printRule($$);
 	}
@@ -571,8 +729,17 @@ variable : ID {
 		$$ = new SymbolInfo("variable", "variable");
 		$$->addChild($1);
 		$$->changeLine();
-		if(indexNotFloat){
+		if(!insideFunction){
+			if(indexNotFloat){
 			helperFunction($1);
+		}
+		else{
+			SymbolInfo* symbol = table.LookUp($1->getName());
+			if(symbol == NULL){
+				fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, $1->getName().c_str());
+				error_count++;
+			}
+		}
 		}
 		printRule($$);
 
@@ -601,14 +768,26 @@ expression : logic_expression{
 		$$ = new SymbolInfo("expression", "expression");
 		$$->addChild($1);
 		$$->changeLine();
+		if(funcVoidError){
+			SymbolInfo* symbol = table.LookUp(forFuncVoidError->getName());
+			if(symbol == NULL){
+			fprintf(error, "Line# %d: Undeclared function '%s'\n", line_count, forFuncVoidError->getName().c_str());
+			error_count++;
+			}
+			delete forFuncVoidError;
+			funcVoidError = false;
+		}
 		printRule($$);
  	}	
 	| variable ASSIGNOP logic_expression {
 		$$ = new SymbolInfo("expression", "expression");
-		$$->addChild($1);
+		$$->addChild($1); // here error 1
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->changeLine();
+		if(funcVoidError){
+		callingFunctionError(forFuncVoidError);
+		}
 		printRule($$);
 	}	
 	;
@@ -625,6 +804,9 @@ logic_expression : rel_expression {
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->changeLine();
+		if(funcVoidError){
+		callingFunctionError(forFuncVoidError);
+		}
 		printRule($$);
 	}	
 	;
@@ -641,6 +823,9 @@ rel_expression	: simple_expression {
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->changeLine();
+		if(funcVoidError){
+		callingFunctionError(forFuncVoidError);
+		}
 		printRule($$);
 	}
 	;
@@ -657,6 +842,9 @@ simple_expression : term {
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->changeLine();
+		if(funcVoidError){
+		callingFunctionError(forFuncVoidError);
+		}
 		printRule($$);
 	}
 	;
@@ -667,20 +855,35 @@ term :	unary_expression{
 		$$->changeLine();
 		printRule($$);
 	}
-    |  term MULOP unary_expression{
+    |  term {divbyzero = true;} MULOP unary_expression{
 		$$ = new SymbolInfo("term", "term");
 		$$->addChild($1);
-		$$->addChild($2);
 		$$->addChild($3);
+		$$->addChild($4);
 		$$->changeLine();
-		if($2->getName() == "%"){
+		if(funcVoidError){
+		callingFunctionError(forFuncVoidError);
+		}
+		if($3->getName() == "%"){
 			if(reducedToFloat != 0){
 				fprintf(error, "Line# %d: Operands of modulus must be integers\n", line_count);
+				error_count++;
+			}
+			if(flagzero){
+				fprintf(error, "Line# %d: Warning: division by zero i=0f=1Const=0\n", line_count);
+				error_count++;
+			}
+		}
+		if($3->getName() == "/"){
+			if(flagzero){
+				fprintf(error, "Line# %d: Warning: division by zero i=0f=1Const=0\n", line_count);
 				error_count++;
 			}
 		}
 		printRule($$);
 		reducedToFloat = 0;
+		flagzero = false;
+		divbyzero = false;
 	}
     ;
 
@@ -689,6 +892,9 @@ unary_expression : ADDOP unary_expression {
 		$$->addChild($1);
 		$$->addChild($2);
 		$$->changeLine();
+		if(funcVoidError){
+		callingFunctionError(forFuncVoidError);
+		}
 		printRule($$);
 	} 
 	| NOT unary_expression {
@@ -696,6 +902,9 @@ unary_expression : ADDOP unary_expression {
 		$$->addChild($1);
 		$$->addChild($2);
 		$$->changeLine();
+		if(funcVoidError){
+		callingFunctionError(forFuncVoidError);
+		}
 		printRule($$);
 	}
 	| factor {
@@ -709,17 +918,32 @@ unary_expression : ADDOP unary_expression {
 factor	: variable {
 		$$ = new SymbolInfo("factor", "factor");
 		$$->addChild($1);
+		if(funcarglist){
+			SymbolInfo* symbol = table.LookUp($1->childList[0]->getName());
+			if(symbol == NULL){
+				fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, $1->childList[0]->getName().c_str());
+				error_count++;
+			}
+			else{
+				SymbolInfo* newSymbol = new SymbolInfo(symbol->getName(), symbol->getType());
+				argType.push_back(newSymbol);
+			}
+		}
 		$$->changeLine();
 		printRule($$);
 	}
-	| ID LPAREN argument_list RPAREN{
+	| ID {funcarglist = true; insideFunction = true;} LPAREN argument_list RPAREN{
 		$$ = new SymbolInfo("factor", "factor");
 		$$->addChild($1);
-		$$->addChild($2);
 		$$->addChild($3);
 		$$->addChild($4);
+		$$->addChild($5);
 		$$->changeLine();
-		callingFunctionError($1);
+		// handleArgError = true;
+		funcVoidError = true;
+		forFuncVoidError = new SymbolInfo($1->getName(), $1->getType());
+		checkFoargTypeError($1);
+		funcarglist = false;
 		printRule($$);
 	}
 	| LPAREN expression RPAREN{
@@ -733,14 +957,28 @@ factor	: variable {
 	| CONST_INT {
 		$$ = new SymbolInfo("factor", "factor");
 		$$->addChild($1);
+		if(divbyzero){
+			if($1->getName() == "0")
+			flagzero = true;
+		}
+		if(funcarglist){
+			SymbolInfo* newSymbol = new SymbolInfo($1->getName(), "INT");
+			argType.push_back(newSymbol);
+		}
 		$$->changeLine();
 		printRule($$);
 	}
 	| CONST_FLOAT{
 		$$ = new SymbolInfo("factor", "factor");
-		arrayIndexConstFloat = true;
+		if(indexNotFloat){
+			arrayIndexConstFloat = true;
+		}
 		$$->addChild($1);
 		$$->changeLine();
+		if(funcarglist){
+			SymbolInfo* newSymbol = new SymbolInfo($1->getName(), "FLOAT");
+				argType.push_back(newSymbol);
+		}
 		reducedToFloat++;
 		printRule($$);
 	}
@@ -749,6 +987,17 @@ factor	: variable {
 		$$->addChild($1);
 		$$->addChild($2);
 		$$->changeLine();
+		if(funcarglist){
+			SymbolInfo* symbol = table.LookUp($1->childList[0]->getName());
+			if(symbol == NULL){
+				fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, $1->childList[0]->getName().c_str());
+				error_count++;
+			}
+			else{
+				SymbolInfo* newSymbol = new SymbolInfo(symbol->getName(), symbol->getType());
+				argType.push_back(newSymbol);
+			}
+		}
 		printRule($$);
 	} 
 	| variable DECOP{
@@ -756,6 +1005,17 @@ factor	: variable {
 		$$->addChild($1);
 		$$->addChild($2);
 		$$->changeLine();
+		if(funcarglist){
+			SymbolInfo* symbol = table.LookUp($1->childList[0]->getName());
+			if(symbol == NULL){
+				fprintf(error, "Line# %d: Undeclared variable '%s'\n", line_count, $1->childList[0]->getName().c_str());
+				error_count++;
+			}
+			else{
+				SymbolInfo* newSymbol = new SymbolInfo(symbol->getName(), symbol->getType());
+				argType.push_back(newSymbol);
+			}
+		}
 		printRule($$);
 	}
 	;
@@ -766,6 +1026,7 @@ argument_list : arguments{
 		$$->changeLine();
 		printRule($$);
 	}
+	|
 	;
 	
 arguments : arguments COMMA logic_expression{
@@ -789,7 +1050,7 @@ arguments : arguments COMMA logic_expression{
 int main(int argc,char *argv[])
 {
 	table.EnterScope();
-	FILE* fp = fopen("sserror.c", "r");
+	FILE* fp = fopen("noerror.c", "r");
 	tokenout = fopen("tokenout.txt", "w");
 	logout = fopen("logout.txt", "w");
 	parseFile = fopen("parsetree.txt", "w");
