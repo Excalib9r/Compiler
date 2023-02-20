@@ -199,28 +199,6 @@ void expression(SymbolInfo* s){
     }
 }
 
-// void variable(SymbolInfo* s){
-//     if(s->childList.size() == 1){
-//         SymbolInfo* child = table.LookUp(s->childList[0]->getName());
-//         if(child->global){
-//             fprintf(codeFile, "\tMOV %s, AX\n", child->asmName);
-//         }
-//         else{
-//             fprintf(codeFile, "\tMOV BP[%d], AX\n", child->offset);
-//         }
-//         fprintf(codeFile, "\tPUSH AX\n");
-//     }
-    // else{
-    //     SymbolInfo* child = table.LookUp(s->childList[0]->getName());
-    //     if(child->global){
-    //         // fprintf(codeFile, "\tMOV %s[-%d], AX\n", child->asmName, );
-    //     }
-    //     else{
-    //         expression(s->childList[2]);
-    //         fprintf(codeFile, "\tMOV BP[%d], AX\n", child->offset*);
-    //     }
-    // }
-// }
 
 void logic_expression(SymbolInfo* s){
     if(s->childList.size() == 1){
@@ -262,32 +240,35 @@ void rel_expression(SymbolInfo* s){
         fprintf(codeFile, "\tPOP DX\n");
         fprintf(codeFile, "\tPOP CX\n");
         fprintf(codeFile, "\tCMP CX, DX\n");
+        
+        string for_relop = "FOR_RELOP" + levelNumber;
+        string end = "END" + levelNumber;
+        levelNumber++;
 
         if(s->childList[1]->name == ">")
-        fprintf(codeFile, "\tJG FOR_RELOP%d\n", levelNumber);
+        fprintf(codeFile, "\tJG %s\n", for_relop.c_str());
 
         if(s->childList[1]->name == ">=")
-        fprintf(codeFile, "\tJGE FOR_RELOP%d\n", levelNumber);
+        fprintf(codeFile, "\tJGE %s\n", for_relop.c_str());
 
         if(s->childList[1]->name == "<")
-        fprintf(codeFile, "\tJL FOR_RELOP%d\n", levelNumber);
+        fprintf(codeFile, "\tJL %s\n", for_relop.c_str());
 
         if(s->childList[1]->name == "<=")
-        fprintf(codeFile, "\tJLE FOR_RELOP%d\n", levelNumber);
+        fprintf(codeFile, "\tJLE %s\n", for_relop.c_str());
 
         if(s->childList[1]->name == "==")
-        fprintf(codeFile, "\tJE FOR_RELOP%d\n", levelNumber);
+        fprintf(codeFile, "\tJE %s\n", for_relop.c_str());
 
         if(s->childList[1]->name == "!=")
-        fprintf(codeFile, "\tJNE FOR_RELOP%d\n", levelNumber);
+        fprintf(codeFile, "\tJNE %s\n", for_relop.c_str());
 
         fprintf(codeFile, "\tMOV CX, 0\n");
-        fprintf(codeFile, "\tJMP END%d\n", levelNumber);
-        fprintf(codeFile, "FOR_RELOP%d:\n", levelNumber);
+        fprintf(codeFile, "\tJMP %s\n", end.c_str());
+        fprintf(codeFile, "%s:\n", for_relop.c_str());
         fprintf(codeFile, "\tMOV CX, 1\n");
-        fprintf(codeFile, "END%d:\n", levelNumber);
+        fprintf(codeFile, "%s:\n", end.c_str());
         fprintf(codeFile, "\tPUSH CX\n");
-        levelNumber++;
     }
 }
 
