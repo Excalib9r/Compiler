@@ -7,11 +7,14 @@
 #include <vector>
 #include "1905080_SymbolTable.cpp"
 #include "SymbolInfo.cpp"
+#include "ICG.cpp"
 
 using namespace std;
 
 int yyparse(void);
 int yylex(void);
+
+FILE* testing = fopen("testing", "w");
 
 FILE* parseFile;
 FILE* tokenout;
@@ -23,6 +26,8 @@ vector<SymbolInfo*> idList;
 vector<SymbolInfo*> paramList;
 vector<string> paramType;
 vector<SymbolInfo*> argType;
+vector<SymbolInfo*> global;
+vector<SymbolInfo*> globalFunctions;
 
 SymbolTable table;
 bool funcarglist = false;
@@ -186,6 +191,9 @@ void insertIntoTable(string type){
 	else{
 		for(int i = 0; i < idList.size(); i++){
 			SymbolInfo* newSymbol = new SymbolInfo(idList[i]->getName(), type , idList[i]->getLine(), idList[i]->getIsPointer());
+			newSymbol->arrSize = idList[i]->arrSize;
+			newSymbol->global = idList[i]->global;
+			newSymbol->offset = idList[i]->offset;
 			bool inserted = table.Insert(newSymbol);
 			if(!inserted){
 				if(table.getCurrentScoptableNumber() == 1){
@@ -243,6 +251,9 @@ void insertParamList(){
 
 void addToparamList(string type, SymbolInfo* symbol){
 	SymbolInfo* newSymbol = new SymbolInfo(symbol->getName(), type , symbol->getLine(), symbol->getIsPointer());
+	newSymbol->arrSize = symbol->arrSize;
+	newSymbol->global = symbol->global;
+	newSymbol->offset = symbol->offset;
 	paramList.push_back(newSymbol);
 }
 
@@ -359,6 +370,7 @@ void print_parsetree(int space, SymbolInfo* s) {
 	}
 
 	fprintf(parseFile, "\n");
+	fflush(parseFile);
 	
 	for(int i=0; i<s->childList.size(); i++){
 		print_parsetree(space + 1, s->childList[i]);
@@ -389,6 +401,7 @@ start : program
 		$$->changeLine();
 		print_parsetree(0, $$);
 		printRule($$);
+		start($$);
 	}
 	;
 
@@ -460,6 +473,7 @@ func_definition : type_specifier ID LPAREN parameter_list RPAREN {funcDef($1, $2
 		$$->addChild($7);
 		$$->changeLine();
 		printRule($$);
+		globalFunctions.push_back($$);
 	}
 	| type_specifier ID LPAREN RPAREN {{funcDef($1, $2);}} compound_statement{
 		$$ = new SymbolInfo("func_definition", "func_definition");
@@ -470,6 +484,7 @@ func_definition : type_specifier ID LPAREN parameter_list RPAREN {funcDef($1, $2
 		$$->addChild($6);
 		$$->changeLine();
 		printRule($$);
+		globalFunctions.push_back($$);
 	}
  	;				
 
@@ -574,6 +589,10 @@ declaration_list : declaration_list COMMA ID{
 		idList.push_back($3);
 		$$->changeLine();
 		printRule($$);
+		if(table.getScoptableNumber() == 1){
+			$3->global = true;
+			global.push_back($3);
+		}
 	}
  	| declaration_list COMMA ID LSQUARE CONST_INT RSQUARE{
 		$$ = new SymbolInfo("declaration_list", "declaration_list");
@@ -584,6 +603,11 @@ declaration_list : declaration_list COMMA ID{
 		$$->addChild($4);
 		$$->addChild($5);
 		$$->addChild($6);
+		$3->arrSize = stoi($5->getName());
+		if(table.getScoptableNumber() == 1){
+			$3->global = true;
+			global.push_back($3);
+		}
 		idList.push_back($3);
 		$$->changeLine();
 		printRule($$);
@@ -594,6 +618,10 @@ declaration_list : declaration_list COMMA ID{
 		idList.push_back($1);
 		$$->changeLine();
 		printRule($$);
+		if(table.getScoptableNumber() == 1){
+			$1->global = true;
+			global.push_back($1);
+		}
 	}
  	| ID LSQUARE CONST_INT RSQUARE{
 		$$ = new SymbolInfo("declaration_list", "declaration_list");
@@ -602,6 +630,12 @@ declaration_list : declaration_list COMMA ID{
 		$$->addChild($2);
 		$$->addChild($3);
 		$$->addChild($4);
+		$1->arrSize = stoi($3->getName());
+		fprintf(testing, "Hello arrSize %d", $1->arrSize);
+		if(table.getScoptableNumber() == 1){
+			$1->global = true;
+			global.push_back($1);
+		}
 		idList.push_back($1);
 		$$->changeLine();
 		printRule($$);
@@ -686,6 +720,7 @@ statement : var_declaration{
 		printRule($$);
 	}
 	| PRINTLN LPAREN ID RPAREN SEMICOLON{
+		cout << "IN PARSER PRINTLN\n";
 		$$ = new SymbolInfo("statement", "statement");
 		$$->addChild($1);
 		$$->addChild($2);
@@ -1050,7 +1085,7 @@ arguments : arguments COMMA logic_expression{
 int main(int argc,char *argv[])
 {
 	table.EnterScope();
-	FILE* fp = fopen("noerror.c", "r");
+	FILE* fp = fopen("input.c", "r");
 	tokenout = fopen("tokenout.txt", "w");
 	logout = fopen("logout.txt", "w");
 	parseFile = fopen("parsetree.txt", "w");

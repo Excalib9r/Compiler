@@ -239,6 +239,22 @@ public:
         }
     }
 
+    void traverseTable(FILE* codeFile){
+        for(int i  = 0; i < bucketSize; i++){
+            SymbolInfo* symbol = arr[i];
+            while(symbol != NULL){
+                if(symbol->getIsPointer()){
+                    int arrSize = symbol->arrSize;
+                    fprintf(codeFile, "\tADD SP, %d\n", arrSize*2);
+                }
+                else{
+                   fprintf(codeFile, "\tADD SP, 2\n"); 
+                }
+                symbol = symbol->getNextSymbol();
+            }
+        }
+    }
+
     void destroyScopeTable()
     {
         for (int i = 0; i < bucketSize; i++)

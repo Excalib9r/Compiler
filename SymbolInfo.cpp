@@ -14,6 +14,7 @@ public:
     string name;
     string type;
     string dtype;
+    string asmName;
     SymbolInfo *nextSymbol;
     vector<SymbolInfo*> childList;
     FHandle *fh;
@@ -21,17 +22,24 @@ public:
     int end;
     bool isPointer;
     bool isFunction;
+    bool global;
+    int arrSize;
+    int offset;
 
     SymbolInfo(string name="", string type="", int line = -1, bool isPointer = false)
     {
         this->name = name;
         this->type = type;
+        asmName = name;
         nextSymbol = NULL;
         start = line;
         end = line;
         this->isPointer = isPointer;
         isFunction = false;
+        global = false;
+        arrSize = 0;
         fh = new FHandle();
+        offset = 0;
     }
 
     int getLine(){

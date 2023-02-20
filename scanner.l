@@ -157,7 +157,7 @@ NEWLINE \n
 			fprintf(tokenout,"<PRINTLN, %s>\n",    yytext);
 			fprintf(tablelog,"Line# %d: Token <PRINTLN> Lexeme %s found\n",    line_count, yytext);
 			yylval.symbol = new SymbolInfo(yytext, "PRINTLN", line_count);
-			return PRINTLN; 
+			return PRINTLN;
 		}
 
 "+"	{

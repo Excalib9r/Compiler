@@ -140,6 +140,10 @@ public:
         }
     }
 
+    void traverseCurrentTable(FILE* codeFile){
+        current->traverseTable(codeFile);
+    }
+
     ~SymbolTable()
     {
         delete current;
