@@ -1,0 +1,2 @@
+Line# 5: Too many arguments to function 'foo'
+Line# 5: Too many arguments to function 'foo'

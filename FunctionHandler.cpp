@@ -1,6 +1,10 @@
+#ifndef SYMBOLINFO_HPT
+#define SYMBOLINFO_HPT
+
 #include <iostream>
 #include <vector>
 #include <string>
+#include "SymbolInfo.cpp"
 using namespace std;
 
 class FHandle {
@@ -8,6 +12,7 @@ class FHandle {
     bool isDeclared;
     bool isDefined;
     vector<string> paramList;
+    vector<SymbolInfo*> parameters;
     FHandle(){
         isDeclared = false;
         isDefined = false;
@@ -23,4 +28,10 @@ class FHandle {
         }
         return true;
     }
+
+    int functionParamListSize(){
+        return paramList.size();
+    }
 };
+
+#endif

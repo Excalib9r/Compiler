@@ -329,6 +329,10 @@ void funcDef(SymbolInfo* typeSpec, SymbolInfo* symbol){
 		newSymbol->fh->isDefined = true;
 		for(int  i = 0; i < paramType.size(); i++){
 			newSymbol->fh->paramList.push_back(paramType[i]);
+			cout << newSymbol->name << endl;
+			cout << paramList[i]->name  << " " << paramList[i]->type << "\n";
+			newSymbol->fh->parameters.push_back(new SymbolInfo(paramList[i]));
+			cout << newSymbol->fh->parameters[i]->name  << " " << newSymbol->fh->parameters[i]->type << "\n";
 		}
 	}
 	paramType.clear();
@@ -401,6 +405,8 @@ start : program
 		$$->changeLine();
 		print_parsetree(0, $$);
 		printRule($$);
+		fflush(parseFile);
+		fclose(parseFile);
 		start($$);
 	}
 	;
@@ -1061,7 +1067,7 @@ argument_list : arguments{
 		$$->changeLine();
 		printRule($$);
 	}
-	|
+	| {$$ = new SymbolInfo("argument_list", "argument_list");}
 	;
 	
 arguments : arguments COMMA logic_expression{
@@ -1099,7 +1105,6 @@ int main(int argc,char *argv[])
 
 
 	fclose(fp);
-	fclose(parseFile);
 	fclose(tokenout);
 	fclose(logout);
 	fclose(tablelog);

@@ -11,6 +11,7 @@ using namespace std;
 extern vector<SymbolInfo*> global;
 extern vector<SymbolInfo*> globalFunctions;
 
+bool argumments = false;
 int levelNumber = 0;
 int globalVariable = 0;
 int returnLevel = 0;
@@ -28,7 +29,6 @@ void statement(SymbolInfo* s);
 void expression_statement(SymbolInfo* s);
 void expression(SymbolInfo* s);
 void logic_expression(SymbolInfo* s);
-void variable(SymbolInfo* s);
 void rel_expression(SymbolInfo* s);
 void simple_expression(SymbolInfo* s);
 void term(SymbolInfo* s);
@@ -36,6 +36,7 @@ void unary_expression(SymbolInfo* s);
 void factor(SymbolInfo* s);
 void argument_list(SymbolInfo* s);
 void arguments(SymbolInfo* s);
+void compound_statement(SymbolInfo* s, vector<SymbolInfo*> &params);
 
 void start(SymbolInfo* s){
     fprintf(codeFile, ".MODEL SMALL\n");
@@ -69,18 +70,23 @@ void start(SymbolInfo* s){
             fprintf(codeFile, "\tMOV AX, @DATA\n");
             fprintf(codeFile,"\tMOV DS, AX\n");
         }
-        compound_statement(globalFunctions[i]->childList[globalFunctions[i]->childList.size()-1]);
+        cout << var->name << endl;
+        for(int  i = 0; i < var->fh->parameters.size(); i++){
+			cout << var->fh->parameters[i]->name  << " " << var->fh->parameters[i]->type << "\n";
+		}
+        compound_statement(globalFunctions[i]->childList[globalFunctions[i]->childList.size()-1], var->fh->parameters);
         fprintf(codeFile, "RETURN%d:\n",returnLevel);
         returnLevel++;
+        fprintf(codeFile, "\tMOV SP, BP\n");
         fprintf(codeFile, "\tPOP BP\n");
         if(var->name == "main"){
             fprintf(codeFile, "\tMOV AH, 4CH\n");
             fprintf(codeFile, "\tINT 21H\n");
         }
         else{
-        fprintf(codeFile, "\tRET\n");
+        fprintf(codeFile, "\tRET %d\n", 2*var->paramListSize());
         }
-        fprintf(codeFile, "%s ENDP\n",var->name.c_str());
+        fprintf(codeFile, "%s ENDP\n",var->asmName.c_str());
     }
     // for println function
     
@@ -93,12 +99,17 @@ void start(SymbolInfo* s){
 }
 
 void argument_list(SymbolInfo* s){
+    if(s->childList.size() != 0)
     arguments(s->childList[0]);
 }
 
 void arguments(SymbolInfo* s){
     if(s->childList.size() == 1){
         logic_expression(s->childList[0]);
+    }
+    else{
+        logic_expression(s->childList[2]);
+        arguments(s->childList[0]);
     }
 }
 
@@ -137,6 +148,26 @@ void declaration_list(SymbolInfo* s){
     }
 }
 
+void compound_statement(SymbolInfo* s, vector<SymbolInfo*> &params){
+    cout << "inside overloaded\n";
+    if(s->childList.size() == 3) {
+        localOffset = 0;
+        table.EnterScope();
+        for(int i = 0; i < params.size(); i++){
+            cout << "helloo\n";
+            params[i]->offset = 4 + i*2;
+            table.Insert(params[i]);
+            cout << params[i]->name << "\n";
+        }
+        cout << "before \n";
+        statements(s->childList[1]);
+        cout << "after\n";
+        table.traverseCurrentTable(codeFile);
+        table.ExitScope();
+    }
+    cout << " finished overloaded\n";
+}
+
 void compound_statement(SymbolInfo* s) {
     if(s->childList.size() == 3) {
         localOffset = 0;
@@ -161,7 +192,6 @@ void statement(SymbolInfo* s) {
         if(s->childList[0]->name == "var_declaration") var_declaration(s->childList[0]);
         if(s->childList[0]->name == "compound_statement") compound_statement(s->childList[0]);
     }
-
     if(s->childList[0]->name == "println" || s->childList[0]->type == "PRINTLN") {
         SymbolInfo* var = table.LookUp(s->childList[2]->name);
         if(var->global)
@@ -170,12 +200,94 @@ void statement(SymbolInfo* s) {
             fprintf(codeFile, "\tMOV AX, BP[%d]\n", var->offset);
         fprintf(codeFile, "\tCALL PRINTLN\n");
     }
+    if(s->childList[0]->type == "IF" || s->childList[0]->name == "if"){
+        if(s->childList.size() == 5){
+            string tl = "TL" + to_string(levelNumber);
+            string el = "EL" + to_string(levelNumber);
+            levelNumber++;
+
+            expression(s->childList[2]);
+            fprintf(codeFile, "\tPOP AX\n");
+            fprintf(codeFile, "\tCMP AX, 0\n");
+            fprintf(codeFile, "\tJNE %s\n",tl.c_str());
+            fprintf(codeFile, "\tJMP %s\n", el.c_str());
+            fprintf(codeFile, "%s:\n", tl.c_str());
+            statement(s->childList[4]);
+            fprintf(codeFile, "%s:\n", el.c_str());
+        }
+        else{
+            string ell = "ELL" + to_string(levelNumber);
+            string tl = "TL" + to_string(levelNumber);
+            string el = "EL" + to_string(levelNumber);
+            levelNumber++;
+
+            expression(s->childList[2]);
+            fprintf(codeFile, "\tPOP AX\n");
+            fprintf(codeFile, "\tCMP AX, 0\n");
+            fprintf(codeFile, "\tJNE %s\n",tl.c_str());
+            fprintf(codeFile, "\tJMP %s\n", ell.c_str());
+            fprintf(codeFile, "%s:\n", tl.c_str());
+            statement(s->childList[4]);
+            fprintf(codeFile, "\tJMP %s\n", el.c_str());
+            fprintf(codeFile, "%s:\n", ell.c_str());
+            statement(s->childList[6]);
+            fprintf(codeFile, "\tJMP %s\n", el.c_str());
+            fprintf(codeFile, "%s:\n", el.c_str());
+        }
+    }
+    if(s->childList[0]->name == "while" || s->childList[0]->type == "WHILE"){
+        string sl = "SL" + to_string(levelNumber);
+        string tl = "TL" + to_string(levelNumber);
+        string el = "EL" + to_string(levelNumber);
+        levelNumber++;
+
+        fprintf(codeFile, "%s:\n", sl.c_str());
+        expression(s->childList[2]);
+        fprintf(codeFile, "\tPOP AX\n");
+        fprintf(codeFile, "\tCMP AX, 0\n");
+        fprintf(codeFile, "\tJNE %s\n",tl.c_str());
+        fprintf(codeFile, "\tJMP %s\n", el.c_str());
+        fprintf(codeFile, "%s:\n", tl.c_str());
+        statement(s->childList[4]);
+        fprintf(codeFile, "\tJMP %s\n", sl.c_str());
+        fprintf(codeFile, "%s:\n", el.c_str());
+    }
+
+    if(s->childList[0]->name == "for" || s->childList[0]->type == "FOR"){
+        string sl = "SL" + to_string(levelNumber);
+        string tl = "TL" + to_string(levelNumber);
+        string el = "EL" + to_string(levelNumber);
+        levelNumber++;
+
+        expression_statement(s->childList[2]);
+
+        fprintf(codeFile, "%s:\n", sl.c_str());
+        expression_statement(s->childList[3]);
+        fprintf(codeFile, "\tCMP AX, 0\n");
+        fprintf(codeFile, "\tJNE %s\n",tl.c_str());
+        fprintf(codeFile, "\tJMP %s\n", el.c_str());
+        fprintf(codeFile, "%s:\n", tl.c_str());
+        statement(s->childList[6]);
+        expression(s->childList[4]);
+        fprintf(codeFile, "\tPOP AX\n");
+        fprintf(codeFile, "\tJMP %s\n", sl.c_str());
+        fprintf(codeFile, "%s:\n", el.c_str());
+    }
+
+    if(s->childList.size() == 3){
+        expression(s->childList[1]);
+        fprintf(codeFile, "\tPOP AX\n");
+        fprintf(codeFile, "\tJMP RETURN%d\n",returnLevel);
+    }
 }
 
 void expression_statement(SymbolInfo* s){
     if(s->childList.size() == 2){
         expression(s->childList[0]);
         fprintf(codeFile, "\tPOP AX\n");
+    }
+    else{
+        fprintf(codeFile, "\tMOV AX, 1\n");
     }
 }
 
@@ -210,23 +322,36 @@ void logic_expression(SymbolInfo* s){
         fprintf(codeFile, "\tPOP DX\n");
         fprintf(codeFile, "\tPOP CX\n");
 
-        if(s->childList[1]->name == "&&"){
-        fprintf(codeFile, "\tCMP CX, 0\n");
-        fprintf(codeFile, "\tJG FOR_LOGICOP%d\n", levelNumber);
-        }
-
-        if(s->childList[1]->name == "||"){
-
-        fprintf(codeFile, "\tJG FOR_LOGICOP%d\n", levelNumber);
-        }
-
-        fprintf(codeFile, "\tMOV CX, 0\n");
-        fprintf(codeFile, "\tJMP END%d\n", levelNumber);
-        fprintf(codeFile, "FOR_LOGICOP%d:\n", levelNumber);
-        fprintf(codeFile, "\tMOV CX, 1\n");
-        fprintf(codeFile, "\tEND%d:\n", levelNumber);
-        fprintf(codeFile, "\tPUSH CX\n");
+        string for_andop = "FOR_ANDOP" + to_string(levelNumber);
+        string for_orop = "FOR_OROP" + to_string(levelNumber);
+        string end = "END" + to_string(levelNumber);
         levelNumber++;
+
+        cout << for_andop << " " << for_orop << "\n";
+
+        fprintf(codeFile, "\tCMP CX, 0\n");
+        if(s->childList[1]->name == "&&"){
+            fprintf(codeFile, "\tJE %s\n", for_andop.c_str());
+            fprintf(codeFile, "\tCMP DX, 0\n");
+            fprintf(codeFile, "\tJE %s\n", for_andop.c_str());
+            fprintf(codeFile, "\tMOV CX, 1\n");
+            fprintf(codeFile, "\tJMP %s\n", end.c_str());
+            fprintf(codeFile, "%s:\n", for_andop.c_str());
+            fprintf(codeFile, "\tMOV CX, 0\n");
+            fprintf(codeFile, "\tJMP %s\n", end.c_str());
+        }
+        if(s->childList[1]->name == "||"){
+            fprintf(codeFile, "\tJNE %s\n", for_orop.c_str());
+            fprintf(codeFile, "\tCMP DX, 0\n");
+            fprintf(codeFile, "\tJNE %s\n", for_orop.c_str());
+            fprintf(codeFile, "\tMOV CX, 0\n");
+            fprintf(codeFile, "\tJMP %s\n", end.c_str());
+            fprintf(codeFile, "%s:\n", for_orop.c_str());
+            fprintf(codeFile, "\tMOV CX, 1\n");
+            fprintf(codeFile, "\tJMP %s\n", end.c_str());
+        }
+        fprintf(codeFile, "%s:\n", end.c_str());
+        fprintf(codeFile, "\tPUSH CX\n");
     }
 }
 
@@ -241,8 +366,8 @@ void rel_expression(SymbolInfo* s){
         fprintf(codeFile, "\tPOP CX\n");
         fprintf(codeFile, "\tCMP CX, DX\n");
         
-        string for_relop = "FOR_RELOP" + levelNumber;
-        string end = "END" + levelNumber;
+        string for_relop = "FOR_RELOP" + to_string(levelNumber);
+        string end = "END" + to_string(levelNumber);
         levelNumber++;
 
         if(s->childList[1]->name == ">")
@@ -310,32 +435,33 @@ void factor(SymbolInfo* s){
             fprintf(codeFile, "\tPUSH AX\n");
         }
     }
-    // else if(s->childList.size() == 4){
-    //     // if(s->childList[0]->getName() == "PRINTLN"){
-    //     //     argument_list(s->childList[2]);
-    //     //     fprintf(codeFile, "\tCALL PRINTLN\n");
-    //     // }
-    // }
+    else if(s->childList.size() == 4){
+        cout << "In factor call function\n";
+        SymbolInfo* symbol = table.LookUp(s->childList[0]->name);
+        argument_list(s->childList[2]);
+        fprintf(codeFile, "\tCALL %s\n", symbol->asmName.c_str()); 
+        fprintf(codeFile, "\tPUSH AX\n");
+    }
     else {
         SymbolInfo* child = table.LookUp(s->childList[0]->childList[0]->name);
         if(child->global){
             if(s->childList[1]->getType() == "DECOP"){
             fprintf(codeFile, "\tPUSH %s\n", child->asmName.c_str());
-            fprintf(codeFile, "\tSUB %s, 1\n", child->asmName.c_str());
+            fprintf(codeFile, "\tSUB WORD PTR %s, 1\n", child->asmName.c_str());
         }
         else{
             fprintf(codeFile, "\tPUSH %s\n", child->asmName.c_str());
-            fprintf(codeFile, "\tADD %s, 1\n" , child->asmName.c_str());
+            fprintf(codeFile, "\tADD WORD PTR %s, 1\n" , child->asmName.c_str());
         }
         }
         else{
         if(s->childList[1]->getType() == "DECOP"){
             fprintf(codeFile, "\tPUSH BP[%d]\n", child->offset);
-            fprintf(codeFile, "\tSUB BP[%d], 1\n", child->offset);
+            fprintf(codeFile, "\tSUB WORD PTR BP[%d], 1\n", child->offset);
         }
         else{
             fprintf(codeFile, "\tPUSH BP[%d]\n", child->offset);
-            fprintf(codeFile, "\tADD BP[%d], 1\n", child->offset);
+            fprintf(codeFile, "\tADD WORD PTR BP[%d], 1\n", child->offset);
         }
         }
     }

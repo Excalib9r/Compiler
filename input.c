@@ -1,38 +1,18 @@
-int i,j;
+int foo(int a, int b){
+	if(a+b <= 5){
+		return 7;
+	}
+	return foo(a-2,b-1) + 2*foo(a-1,b-2);
+}
+ 
+ 
 int main(){
+	int i,j,k;
+	i = 7;
+	j = 3;
  
-	int k,ll,m,n,o,p;
- 
-	i = 1;
-	println(i);
-	j = 5 + 8;
-	println(j);
-	k = i + 2*j;
+	k = foo(i,j);
 	println(k);
-
-	m = k%9;
-	println(m);
- 
-	n = m <= ll;
-	println(n);
- 
-	o = i != j;
-	println(o);
- 
-	p = n || o;
-	println(p);
- 
-	p = n && o;
-	println(p);
-	
-	p++;
-	println(p);
- 
-	k = -p;
-	println(k);
- 
-  
- 
  
 	return 0;
 }

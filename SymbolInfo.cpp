@@ -2,11 +2,39 @@
 #define SYMBOLINFO_HPP
 
 #include <iostream>
-#include "FunctionHandler.cpp"
 #include <vector>
 #include <string>
 
 using namespace std;
+
+class SymbolInfo;
+
+class FHandle {
+    public:
+    bool isDeclared;
+    bool isDefined;
+    vector<string> paramList;
+    vector<SymbolInfo*> parameters;
+    FHandle(){
+        isDeclared = false;
+        isDefined = false;
+    }
+
+    bool sameParamList(vector<string> pmList){
+        if(pmList.size() != paramList.size())
+        return false;
+
+        for(int  i = 0; i < pmList.size(); i++){
+            if(paramList[i] != pmList[i])
+            return false;
+        }
+        return true;
+    }
+
+    int functionParamListSize(){
+        return paramList.size();
+    }
+};
 
 class SymbolInfo
 {
@@ -40,6 +68,21 @@ public:
         arrSize = 0;
         fh = new FHandle();
         offset = 0;
+    }
+
+    SymbolInfo(SymbolInfo* s){
+        this->name = s->name;
+        this->type = s->type;
+        asmName = s->name;
+        nextSymbol = NULL;
+        start = s->start;
+        end = s->end;
+        this->isPointer = s->isPointer;
+        isFunction = s->isFunction;
+        global = s->global;
+        arrSize = s->arrSize;
+        fh = NULL;
+        offset = s->offset;
     }
 
     int getLine(){
@@ -76,6 +119,10 @@ public:
         this->name = name;
     }
 
+    int paramListSize(){
+        return fh->functionParamListSize();
+    }
+
     string getName()
     {
         return this->name;
@@ -101,6 +148,8 @@ public:
         return this->nextSymbol;
     }
 };
+
+
 
 // int main() {
 //     std::cout<<"Hello World\n";
